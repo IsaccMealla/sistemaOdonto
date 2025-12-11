@@ -1,0 +1,31 @@
+<svg width="45" height="55" viewBox="0 0 45 55" xmlns="http://www.w3.org/2000/svg">
+  <!-- Incisivo Inferior - Simplificado y Realista -->
+  
+  <!-- Corona (más pequeña) -->
+  <path d="M 20 12
+           L 18 14
+           L 17 38
+           Q 18 40, 22.5 41
+           Q 27 40, 28 38
+           L 27 14
+           L 25 12 Z" 
+        fill="#F8F8F8" stroke="#707070" stroke-width="0.8"/>
+  
+  <!-- CEJ en Y=12 -->
+  
+  <!-- Raíz -->
+  <path d="M 20 12 L 20.5 0 L 24.5 0 L 25 12 Z" 
+        fill="#E0D0B0" stroke="#A89070" stroke-width="0.5" opacity="0.4"/>
+  
+  <!-- Sombra -->
+  <path d="M 17 14 L 17 38 Q 17.5 39, 19 39.5" 
+        fill="none" stroke="#D0D0D0" stroke-width="1.2" opacity="0.5"/>
+  
+  <!-- Borde incisal -->
+  <line x1="19" y1="40" x2="26" y2="40" 
+        stroke="#909090" stroke-width="1" stroke-linecap="round"/>
+  
+  <!-- Brillo -->
+  <ellipse cx="20" cy="24" rx="2.5" ry="9" 
+           fill="#FFFFFF" opacity="0.35"/>
+</svg>

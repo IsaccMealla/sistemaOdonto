@@ -1,0 +1,536 @@
+import 'package:flutter/material.dart';
+
+class ExamenDentalWidget extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final Function(Map<String, dynamic>) onDataChanged;
+
+  const ExamenDentalWidget({
+    Key? key,
+    required this.data,
+    required this.onDataChanged,
+  }) : super(key: key);
+
+  @override
+  State<ExamenDentalWidget> createState() => _ExamenDentalWidgetState();
+}
+
+class _ExamenDentalWidgetState extends State<ExamenDentalWidget> {
+  // Datos del odontograma: estructura por diente con símbolos
+  Map<String, dynamic> _odontogramaData = {};
+  
+  // Condiciones dentales con sus colores/símbolos
+  final Map<String, Map<String, dynamic>> _condiciones = {
+    'caries': {'nombre': 'Caries', 'color': Colors.red, 'simbolo': '●'},
+    'resina': {'nombre': 'Obturación Resina', 'color': Colors.green, 'simbolo': '●'},
+    'amalgama': {'nombre': 'Obturación Amalgama', 'color': Colors.blue, 'simbolo': 'X'},
+    'calculo': {'nombre': 'Cálculo', 'color': Colors.blue, 'simbolo': '-'},
+    'extraer': {'nombre': 'Por Extraer', 'color': Colors.red, 'simbolo': 'X'},
+    'corona': {'nombre': 'Corona', 'color': Colors.black, 'simbolo': '●'},
+    'ausente': {'nombre': 'Ausente', 'color': Colors.red, 'simbolo': 'O'},
+  };
+
+  // Numeración FDI de dientes
+  final List<int> _dientesSuperiores = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+  final List<int> _dientesInferiores = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
+
+  @override
+  void initState() {
+    super.initState();
+    _odontogramaData = Map<String, dynamic>.from(widget.data['odontograma'] ?? {});
+    _inicializarDientes();
+  }
+
+  void _inicializarDientes() {
+    // Inicializar estructura de datos si no existe
+    for (var diente in [..._dientesSuperiores, ..._dientesInferiores]) {
+      if (!_odontogramaData.containsKey(diente.toString())) {
+        _odontogramaData[diente.toString()] = {
+          'simbolos': [], // Lista de símbolos aplicados
+        };
+      }
+    }
+  }
+
+  void _agregarSimbolo(int diente, String condicion) {
+    setState(() {
+      if (!_odontogramaData.containsKey(diente.toString())) {
+        _odontogramaData[diente.toString()] = {'simbolos': []};
+      }
+      
+      final simbolos = _odontogramaData[diente.toString()]['simbolos'] as List;
+      
+      // Si ya existe ese símbolo, no agregarlo de nuevo
+      if (!simbolos.contains(condicion)) {
+        simbolos.add(condicion);
+      }
+
+      widget.onDataChanged({
+        ...widget.data,
+        'odontograma': _odontogramaData,
+      });
+    });
+  }
+
+  void _removerSimbolo(int diente, String condicion) {
+    setState(() {
+      if (_odontogramaData.containsKey(diente.toString())) {
+        final simbolos = _odontogramaData[diente.toString()]['simbolos'] as List;
+        simbolos.remove(condicion);
+        
+        widget.onDataChanged({
+          ...widget.data,
+          'odontograma': _odontogramaData,
+        });
+      }
+    });
+  }
+
+  Widget _buildLeyenda() {
+    return Card(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Leyenda',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 20,
+              runSpacing: 10,
+              children: _condiciones.entries.map((entry) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: entry.value['color'],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          entry.value['simbolo'],
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      entry.value['nombre'],
+                      style: TextStyle(color: Colors.black, fontSize: 14),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectorCondicion() {
+    return Card(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '1. Selecciona la condición que deseas marcar:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _condiciones.entries.map((entry) {
+                final isSelected = _condicionSeleccionada == entry.key;
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _condicionSeleccionada = isSelected ? null : entry.key;
+                    });
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? entry.value['color'].withOpacity(0.2)
+                          : Colors.grey.shade100,
+                      border: Border.all(
+                        color: isSelected
+                            ? entry.value['color']
+                            : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: entry.value['color'],
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              entry.value['simbolo'],
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          entry.value['nombre'],
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_condicionSeleccionada != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: Colors.blue.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '2. Ahora haz clic en las áreas de los dientes donde quieres aplicar esta condición',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.blue.shade900),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _condicionSeleccionada = null),
+                      child: Text('Cancelar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOdontograma() {
+    return Card(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Odontograma Interactivo',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Dientes superiores con 3 vistas
+            _buildArcadaDental(_dientesSuperiores, 'SUPERIORES'),
+
+            const SizedBox(height: 32),
+
+            // Dientes inferiores con 3 vistas
+            _buildArcadaDental(_dientesInferiores, 'INFERIORES'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArcadaDental(List<int> dientes, String titulo) {
+    return Column(
+      children: [
+        // Números de dientes
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: dientes.map((diente) {
+            return Container(
+              width: 55,
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              child: Center(
+                child: Text(
+                  diente.toString(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 4),
+
+        // Vista vestibular
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: dientes.map((diente) {
+            return _buildVistaVestibular(diente);
+          }).toList(),
+        ),
+
+        // Vista oclusal
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: dientes.map((diente) {
+            return _buildVistaOclusal(diente);
+          }).toList(),
+        ),
+
+        // Vista lingual
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: dientes.map((diente) {
+            return _buildVistaLingual(diente);
+          }).toList(),
+        ),
+
+        const SizedBox(height: 8),
+        Text(
+          titulo,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVistaVestibular(int diente) {
+    final dienteData = _odontogramaData[diente.toString()] ?? {};
+    final condicion = dienteData['vestibular'];
+
+    return GestureDetector(
+      onTap: () => _marcarArea(diente, 'vestibular'),
+      child: Container(
+        width: 55,
+        height: 35,
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+        decoration: BoxDecoration(
+          color: _getColorCondicion(condicion),
+          border: Border.all(color: Colors.grey.shade400, width: 1),
+        ),
+        child: Center(
+          child: Text(
+            _getSimboloCondicion(condicion),
+            style: TextStyle(
+              color: condicion == null ? Colors.transparent : Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVistaOclusal(int diente) {
+    final dienteData = _odontogramaData[diente.toString()] ?? {};
+
+    // Los dientes molares y premolares (4,5,6,7,8) tienen superficies divididas
+    final esMolarPremolar = diente.toString().endsWith('4') ||
+        diente.toString().endsWith('5') ||
+        diente.toString().endsWith('6') ||
+        diente.toString().endsWith('7') ||
+        diente.toString().endsWith('8');
+
+    if (esMolarPremolar) {
+      return Container(
+        width: 55,
+        height: 40,
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _buildSuperficieOclusal(diente, 'oclusal_mesial', 27.5, 20),
+                _buildSuperficieOclusal(diente, 'oclusal_distal', 27.5, 20),
+              ],
+            ),
+            Row(
+              children: [
+                _buildSuperficieOclusal(diente, 'oclusal_vestibular', 27.5, 20),
+                _buildSuperficieOclusal(diente, 'oclusal_lingual', 27.5, 20),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Incisivos y caninos (1,2,3)
+      return _buildSuperficieOclusal(diente, 'oclusal', 55, 40);
+    }
+  }
+
+  Widget _buildSuperficieOclusal(
+      int diente, String area, double width, double height) {
+    final dienteData = _odontogramaData[diente.toString()] ?? {};
+    final condicion = dienteData[area];
+
+    return GestureDetector(
+      onTap: () => _marcarArea(diente, area),
+      child: Container(
+        width: width,
+        height: height,
+        margin: const EdgeInsets.all(0.5),
+        decoration: BoxDecoration(
+          color: _getColorCondicion(condicion),
+          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+        ),
+        child: Center(
+          child: Text(
+            _getSimboloCondicion(condicion),
+            style: TextStyle(
+              color: condicion == null ? Colors.transparent : Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVistaLingual(int diente) {
+    final dienteData = _odontogramaData[diente.toString()] ?? {};
+    final condicion = dienteData['lingual'];
+
+    return GestureDetector(
+      onTap: () => _marcarArea(diente, 'lingual'),
+      child: Container(
+        width: 55,
+        height: 35,
+        margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+        decoration: BoxDecoration(
+          color: _getColorCondicion(condicion),
+          border: Border.all(color: Colors.grey.shade400, width: 1),
+        ),
+        child: Center(
+          child: Text(
+            _getSimboloCondicion(condicion),
+            style: TextStyle(
+              color: condicion == null ? Colors.transparent : Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _marcarArea(int diente, String area) {
+    if (_condicionSeleccionada == null) {
+      _mostrarMensaje('Primero selecciona una condición de la leyenda');
+      return;
+    }
+
+    setState(() {
+      if (!_odontogramaData.containsKey(diente.toString())) {
+        _odontogramaData[diente.toString()] = {};
+      }
+
+      // Si ya tiene esa condición, la quitamos; si no, la agregamos
+      if (_odontogramaData[diente.toString()][area] == _condicionSeleccionada) {
+        _odontogramaData[diente.toString()][area] = null;
+      } else {
+        _odontogramaData[diente.toString()][area] = _condicionSeleccionada;
+      }
+
+      widget.onDataChanged({
+        ...widget.data,
+        'odontograma': _odontogramaData,
+      });
+    });
+  }
+
+  Color _getColorCondicion(String? condicion) {
+    if (condicion == null) return Colors.white;
+    return _condiciones[condicion]?['color'] ?? Colors.grey;
+  }
+
+  String _getSimboloCondicion(String? condicion) {
+    if (condicion == null) return '';
+    return _condiciones[condicion]?['simbolo'] ?? '';
+  }
+
+  void _mostrarMensaje(String mensaje) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSelectorCondicion(),
+          const SizedBox(height: 16),
+          _buildLeyenda(),
+          const SizedBox(height: 16),
+          _buildOdontograma(),
+        ],
+      ),
+    );
+  }
+}

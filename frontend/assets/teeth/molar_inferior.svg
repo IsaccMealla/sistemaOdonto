@@ -1,0 +1,40 @@
+<svg width="55" height="55" viewBox="0 0 55 55" xmlns="http://www.w3.org/2000/svg">
+  <!-- Molar Inferior - Simplificado y Realista -->
+  
+  <!-- Corona con cúspides -->
+  <path d="M 15 15
+           L 14 18
+           L 14 30
+           L 17 34
+           L 20 32
+           L 22 36
+           L 27.5 38
+           L 33 36
+           L 35 32
+           L 38 34
+           L 41 30
+           L 41 18
+           L 40 15 Z" 
+        fill="#F8F8F8" stroke="#707070" stroke-width="0.8"/>
+  
+  <!-- CEJ en Y=15 -->
+  <line x1="14" y1="15" x2="41" y2="15" stroke="#999" stroke-width="0.8"/>
+  
+  <!-- Raíces (2 raíces) -->
+  <path d="M 15 15 L 16 0 L 20 0 L 19 15 Z" 
+        fill="#E0D0B0" stroke="#A89070" stroke-width="0.5" opacity="0.4"/>
+  <path d="M 36 15 L 36 0 L 40 0 L 40 15 Z" 
+        fill="#E0D0B0" stroke="#A89070" stroke-width="0.5" opacity="0.4"/>
+  
+  <!-- Surcos -->
+  <line x1="22" y1="15" x2="22" y2="35" stroke="#A0A0A0" stroke-width="0.6" opacity="0.5"/>
+  <line x1="33" y1="15" x2="33" y2="35" stroke="#A0A0A0" stroke-width="0.6" opacity="0.5"/>
+  
+  <!-- Sombra -->
+  <path d="M 14 18 L 14 30 Q 14.5 31, 16 32" 
+        fill="none" stroke="#D0D0D0" stroke-width="1.5" opacity="0.5"/>
+  
+  <!-- Brillo -->
+  <ellipse cx="18" cy="24" rx="2.5" ry="8" 
+           fill="#FFFFFF" opacity="0.35"/>
+</svg>
