@@ -20,6 +20,7 @@ class _PacienteFormState extends State<PacienteForm> {
   // Controladores básicos del paciente
   final TextEditingController nombresCtrl = TextEditingController();
   final TextEditingController apellidosCtrl = TextEditingController();
+  final TextEditingController ciCtrl = TextEditingController();
   final TextEditingController celularCtrl = TextEditingController();
   final TextEditingController edadCtrl = TextEditingController();
   String sexoValue = '';
@@ -37,6 +38,7 @@ class _PacienteFormState extends State<PacienteForm> {
     if (widget.paciente != null) {
       nombresCtrl.text = widget.paciente!['nombres'] ?? '';
       apellidosCtrl.text = widget.paciente!['apellidos'] ?? '';
+      ciCtrl.text = widget.paciente!['ci'] ?? '';
       celularCtrl.text = widget.paciente!['celular'] ?? '';
       edadCtrl.text = widget.paciente!['edad']?.toString() ?? '';
       sexoValue = widget.paciente!['sexo'] ?? '';
@@ -130,6 +132,18 @@ class _PacienteFormState extends State<PacienteForm> {
                       children: [
                         Expanded(
                           child: TextFormField(
+                            controller: ciCtrl,
+                            readOnly: isView,
+                            decoration: InputDecoration(
+                              labelText: 'Cédula de Identidad',
+                              hintText: 'Ej: 1234567',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
                             controller: celularCtrl,
                             readOnly: isView,
                             decoration: InputDecoration(labelText: 'Celular'),
@@ -185,15 +199,28 @@ class _PacienteFormState extends State<PacienteForm> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: estadoCivilValue.isEmpty
+                            value: estadoCivilValue.isEmpty
                                 ? null
                                 : estadoCivilValue,
                             decoration:
                                 InputDecoration(labelText: 'Estado Civil'),
-                            items: ['Soltero', 'Casado', 'Divorciado', 'Viudo']
-                                .map((e) =>
-                                    DropdownMenuItem(value: e, child: Text(e)))
-                                .toList(),
+                            items: () {
+                              final opciones = [
+                                'Soltero',
+                                'Casado',
+                                'Divorciado',
+                                'Viudo'
+                              ];
+                              // Agregar el valor actual si no está en la lista
+                              if (estadoCivilValue.isNotEmpty &&
+                                  !opciones.contains(estadoCivilValue)) {
+                                opciones.add(estadoCivilValue);
+                              }
+                              return opciones
+                                  .map((e) => DropdownMenuItem(
+                                      value: e, child: Text(e)))
+                                  .toList();
+                            }(),
                             onChanged: isView
                                 ? null
                                 : (v) =>
@@ -255,6 +282,7 @@ class _PacienteFormState extends State<PacienteForm> {
                     final data = {
                       'nombres': nombresCtrl.text,
                       'apellidos': apellidosCtrl.text,
+                      'ci': ciCtrl.text.isEmpty ? null : ciCtrl.text,
                       'edad': int.tryParse(edadCtrl.text) ?? null,
                       'sexo': sexoValue.isEmpty ? null : sexoValue,
                       'fecha_nacimiento': fechaNacimientoCtrl.text.isEmpty

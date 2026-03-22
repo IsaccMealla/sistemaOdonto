@@ -209,8 +209,9 @@ class _AntecedenteFormScreenState extends State<AntecedenteFormScreen>
     );
     if (picked != null) {
       setState(() {
+        // Formato YYYY-MM-DD para el backend
         dataMap[fieldKey] =
-            '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
   }

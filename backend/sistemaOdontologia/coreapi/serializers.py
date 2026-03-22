@@ -10,12 +10,24 @@ from .models import (
     AntecedentesPatologicosPersonales,
     RegistroCirugiaBucal,
     RegistroOperatoriaEndodoncia,
-    RegistroPeriodoncia,
     RegistroHistoriaClinica,
     RegistroProstodonciaFija,
     RegistroProstodonciaRemovible,
     RegistroOdontopediatria,
     RegistroSemiologia,
+    SeguimientoPaciente,
+    EntradaSeguimiento,
+    ProtocoloQuirurgico,
+    Permiso,
+    RolPermiso,
+    UsuarioPermiso,
+    Citas,
+    TratamientoMateria,
+    PlanTratamiento,
+    ProcedimientoPlan,
+    EvolucionClinica,
+    TransferenciaPaciente,
+    RemisionInterCatedra,
 )
 
 
@@ -219,15 +231,16 @@ class UsuarioSerializer(serializers.ModelSerializer):
         validated_data['deleted_at'] = None
         validated_data['deleted_by'] = None
         
-        # Hashear contraseña
-        if password is not None:
-            import hashlib
-            validated_data['password_hash'] = hashlib.sha256(password.encode()).hexdigest()
-        else:
+        # Validar contraseña
+        if password is None:
             raise serializers.ValidationError({"password": "La contraseña es requerida"})
         
-        # Crear usuario
+        # Crear usuario sin password_hash en validated_data
         usuario = super().create(validated_data)
+        
+        # Usar set_password para hashear correctamente (compatible con Django auth)
+        usuario.set_password(password)
+        usuario.save()
         
         # Asignar rol si se proporcionó
         if rol_id:
@@ -242,9 +255,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Manejar actualización de contraseña
         password = validated_data.pop('password', None)
-        if password is not None:
-            import hashlib
-            instance.password_hash = hashlib.sha256(password.encode()).hexdigest()
         
         # Manejar actualización de rol
         rol_id = validated_data.pop('rol_id', None)
@@ -257,7 +267,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
                 rol_id=rol_id
             )
         
-        return super().update(instance, validated_data)
+        # Actualizar otros campos
+        instance = super().update(instance, validated_data)
+        
+        # Si se proporcionó una nueva contraseña, hashearla correctamente
+        if password is not None:
+            instance.set_password(password)
+            instance.save()
+        
+        return instance
     
     def to_representation(self, instance):
         """Personalizar representación del usuario"""
@@ -902,29 +920,6 @@ class RegistroOperatoriaEndodonciaSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class RegistroPeridonciaSerializer(serializers.ModelSerializer):
-    estudiante_nombre = serializers.SerializerMethodField()
-    paciente_nombre = serializers.SerializerMethodField()
-    docente_nombre = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = RegistroPeriodoncia
-        fields = '__all__'
-    
-    def get_estudiante_nombre(self, obj):
-        if obj.estudiante:
-            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip()
-        return None
-    
-    def get_paciente_nombre(self, obj):
-        if obj.paciente:
-            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
-        return None
-    
-    def get_docente_nombre(self, obj):
-        if obj.aprobado_por:
-            return f"{obj.aprobado_por.nombres or ''} {obj.aprobado_por.apellidos or ''}".strip()
-        return None
     
     def create(self, validated_data):
         if not validated_data.get('id'):
@@ -942,8 +937,19 @@ class RegistroHistoriaClinicaSerializer(serializers.ModelSerializer):
     estado_display = serializers.SerializerMethodField()
     
     # Hacer campos opcionales
-    historial = serializers.CharField(required=False, allow_null=True)
-    estudiante = serializers.CharField(required=False, allow_null=True)
+    from .models import Usuarios, HistorialesClinicos
+    historial = serializers.SlugRelatedField(
+        slug_field='id',
+        queryset=HistorialesClinicos.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    estudiante = serializers.SlugRelatedField(
+        slug_field='id',
+        queryset=Usuarios.objects.all(),
+        required=False,
+        allow_null=True
+    )
     
     class Meta:
         model = RegistroHistoriaClinica
@@ -1110,5 +1116,463 @@ class RegistroSemiologiaSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         if not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class EntradaSeguimientoSerializer(serializers.ModelSerializer):
+    """Serializer para cada entrada de tratamiento"""
+    firmado_por_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = EntradaSeguimiento
+        fields = '__all__'
+    
+    def get_firmado_por_nombre(self, obj):
+        if obj.firmado_por:
+            return f"{obj.firmado_por.nombres or ''} {obj.firmado_por.apellidos or ''}".strip()
+        return None
+    
+    def create(self, validated_data):
+        if not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class SeguimientoPacienteSerializer(serializers.ModelSerializer):
+    """Serializer para la hoja de seguimiento"""
+    entradas = EntradaSeguimientoSerializer(many=True, read_only=True)
+    estudiante_nombre = serializers.SerializerMethodField()
+    paciente_nombre = serializers.SerializerMethodField()
+    paciente_ci = serializers.SerializerMethodField()
+    total_entradas = serializers.SerializerMethodField()
+    entradas_firmadas = serializers.SerializerMethodField()
+    entradas_pendientes = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SeguimientoPaciente
+        fields = '__all__'
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip()
+        return None
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_paciente_ci(self, obj):
+        if obj.paciente:
+            return obj.paciente.ci
+        return None
+    
+    def get_total_entradas(self, obj):
+        return obj.entradas.filter(is_deleted=False).count()
+    
+    def get_entradas_firmadas(self, obj):
+        return obj.entradas.filter(is_deleted=False, firmado=True).count()
+    
+    def get_entradas_pendientes(self, obj):
+        return obj.entradas.filter(is_deleted=False, firmado=False).count()
+    
+    def create(self, validated_data):
+        if not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class ProtocoloQuirurgicoSerializer(serializers.ModelSerializer):
+    """Serializer para Protocolo Quirúrgico"""
+    paciente_nombre = serializers.SerializerMethodField()
+    paciente_sexo = serializers.SerializerMethodField()
+    estudiante_nombre = serializers.SerializerMethodField()
+    docente_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ProtocoloQuirurgico
+        fields = '__all__'
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_paciente_sexo(self, obj):
+        if obj.paciente:
+            return obj.paciente.sexo
+        return None
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip()
+        return None
+    
+    def get_docente_nombre(self, obj):
+        if obj.docente:
+            return f"{obj.docente.nombres or ''} {obj.docente.apellidos or ''}".strip()
+        return None
+    
+    def create(self, validated_data):
+        if not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+# ===================== PERMISSION SERIALIZERS =====================
+
+class PermisoSerializer(serializers.ModelSerializer):
+    """Serializer para Permiso"""
+    
+    class Meta:
+        model = Permiso
+        fields = '__all__'
+        read_only_fields = ['creado_en']
+
+
+class RolPermisoSerializer(serializers.ModelSerializer):
+    """Serializer para RolPermiso con información detallada"""
+    permiso_nombre = serializers.SerializerMethodField()
+    permiso_codigo = serializers.SerializerMethodField()
+    permiso_descripcion = serializers.SerializerMethodField()
+    rol_nombre = serializers.SerializerMethodField()
+    otorgado_por_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RolPermiso
+        fields = '__all__'
+        read_only_fields = ['fecha_asignacion']
+    
+    def get_permiso_nombre(self, obj):
+        return obj.permiso.nombre if obj.permiso else None
+    
+    def get_permiso_codigo(self, obj):
+        return obj.permiso.codigo if obj.permiso else None
+    
+    def get_permiso_descripcion(self, obj):
+        return obj.permiso.descripcion if obj.permiso else None
+    
+    def get_rol_nombre(self, obj):
+        return obj.rol.nombre if obj.rol else None
+    
+    def get_otorgado_por_nombre(self, obj):
+        if obj.otorgado_por:
+            return f"{obj.otorgado_por.nombres or ''} {obj.otorgado_por.apellidos or ''}".strip()
+        return None
+    
+    def create(self, validated_data):
+        """Crear RolPermiso con UUID generado automáticamente"""
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class UsuarioPermisoSerializer(serializers.ModelSerializer):
+    """Serializer para UsuarioPermiso con información detallada"""
+    permiso_nombre = serializers.SerializerMethodField()
+    permiso_codigo = serializers.SerializerMethodField()
+    permiso_descripcion = serializers.SerializerMethodField()
+    usuario_nombre = serializers.SerializerMethodField()
+    otorgado_por_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UsuarioPermiso
+        fields = '__all__'
+        read_only_fields = ['fecha_asignacion']
+    
+    def get_permiso_nombre(self, obj):
+        return obj.permiso.nombre if obj.permiso else None
+    
+    def get_permiso_codigo(self, obj):
+        return obj.permiso.codigo if obj.permiso else None
+    
+    def get_permiso_descripcion(self, obj):
+        return obj.permiso.descripcion if obj.permiso else None
+    
+    def get_usuario_nombre(self, obj):
+        if obj.usuario:
+            return f"{obj.usuario.nombres or ''} {obj.usuario.apellidos or ''}".strip()
+        return None
+    
+    def get_otorgado_por_nombre(self, obj):
+        if obj.otorgado_por:
+            return f"{obj.otorgado_por.nombres or ''} {obj.otorgado_por.apellidos or ''}".strip()
+        return None
+
+
+class CitaSerializer(serializers.ModelSerializer):
+    """Serializer para Citas con información detallada de relaciones"""
+    paciente_nombre = serializers.SerializerMethodField()
+    estudiante_nombre = serializers.SerializerMethodField()
+    docente_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Citas
+        fields = '__all__'
+        read_only_fields = ['creado_en', 'actualizado_en']
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip()
+        return None
+    
+    def get_docente_nombre(self, obj):
+        if obj.docente:
+            return f"{obj.docente.nombres or ''} {obj.docente.apellidos or ''}".strip()
+        return None
+    
+    def create(self, validated_data):
+        """Crear cita con UUID generado automáticamente"""
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class TratamientoMateriaSerializer(serializers.ModelSerializer):
+    """Serializer para TratamientoMateria con información detallada"""
+    estudiante_nombre = serializers.SerializerMethodField()
+    paciente_nombre = serializers.SerializerMethodField()
+    docente_revisor_nombre = serializers.SerializerMethodField()
+    materia_display = serializers.CharField(source='get_materia_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    class Meta:
+        model = TratamientoMateria
+        fields = '__all__'
+        read_only_fields = ['creado_en', 'actualizado_en', 'fecha_solicitud', 'fecha_revision', 'cupo_numero']
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip() or obj.estudiante.username
+        return None
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_docente_revisor_nombre(self, obj):
+        if obj.docente_revisor:
+            return f"{obj.docente_revisor.nombres or ''} {obj.docente_revisor.apellidos or ''}".strip() or obj.docente_revisor.username
+        return None
+    
+    def create(self, validated_data):
+        """Crear tratamiento con UUID generado automáticamente"""
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class ProcedimientoPlanSerializer(serializers.ModelSerializer):
+    """Serializer para procedimientos del plan"""
+    prioridad_display = serializers.CharField(source='get_prioridad_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    class Meta:
+        model = ProcedimientoPlan
+        fields = '__all__'
+        read_only_fields = ['creado_en', 'actualizado_en']
+    
+    def create(self, validated_data):
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class EvolucionClinicaSerializer(serializers.ModelSerializer):
+    """Serializer para evoluciones clínicas"""
+    estudiante_nombre = serializers.SerializerMethodField()
+    docente_nombre = serializers.SerializerMethodField()
+    procedimiento_descripcion = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = EvolucionClinica
+        fields = '__all__'
+        read_only_fields = ['creado_en', 'actualizado_en', 'fecha_firma_estudiante', 'fecha_firma_docente']
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip() or obj.estudiante.username
+        return None
+    
+    def get_docente_nombre(self, obj):
+        if obj.docente_supervisor:
+            return f"{obj.docente_supervisor.nombres or ''} {obj.docente_supervisor.apellidos or ''}".strip() or obj.docente_supervisor.username
+        return None
+    
+    def get_procedimiento_descripcion(self, obj):
+        if obj.procedimiento:
+            return obj.procedimiento.descripcion
+        return None
+    
+    def create(self, validated_data):
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class PlanTratamientoSerializer(serializers.ModelSerializer):
+    """Serializer para planes de tratamiento con procedimientos y evoluciones"""
+    procedimientos = ProcedimientoPlanSerializer(many=True, read_only=True)
+    evoluciones = EvolucionClinicaSerializer(many=True, read_only=True)
+    
+    # Serializers anidados para objetos completos
+    paciente = PacienteSerializer(read_only=True)
+    estudiante = serializers.SerializerMethodField()
+    aprobado_por = serializers.SerializerMethodField()
+    
+    # IDs para escritura
+    paciente_id = serializers.CharField(write_only=True, required=False, source='paciente')
+    estudiante_id = serializers.CharField(write_only=True, required=False, source='estudiante')
+    aprobado_por_id = serializers.CharField(write_only=True, required=False, source='aprobado_por')
+    
+    paciente_nombre = serializers.SerializerMethodField()
+    estudiante_nombre = serializers.SerializerMethodField()
+    aprobado_por_nombre = serializers.SerializerMethodField()
+    materia_display = serializers.CharField(source='get_materia_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    class Meta:
+        model = PlanTratamiento
+        fields = '__all__'
+        read_only_fields = ['fecha_creacion', 'actualizado_en', 'total_procedimientos', 
+                           'procedimientos_completados', 'progreso_porcentaje', 'fecha_aprobacion']
+    
+    def get_estudiante(self, obj):
+        if obj.estudiante:
+            return {
+                'id': obj.estudiante.id,
+                'username': obj.estudiante.username,
+                'nombres': obj.estudiante.nombres,
+                'apellidos': obj.estudiante.apellidos,
+                'nombre_completo': f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip()
+            }
+        return None
+    
+    def get_aprobado_por(self, obj):
+        if obj.aprobado_por:
+            return {
+                'id': obj.aprobado_por.id,
+                'username': obj.aprobado_por.username,
+                'nombres': obj.aprobado_por.nombres,
+                'apellidos': obj.aprobado_por.apellidos,
+                'nombre_completo': f"{obj.aprobado_por.nombres or ''} {obj.aprobado_por.apellidos or ''}".strip()
+            }
+        return None
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_estudiante_nombre(self, obj):
+        if obj.estudiante:
+            return f"{obj.estudiante.nombres or ''} {obj.estudiante.apellidos or ''}".strip() or obj.estudiante.username
+        return None
+    
+    def get_aprobado_por_nombre(self, obj):
+        if obj.aprobado_por:
+            return f"{obj.aprobado_por.nombres or ''} {obj.aprobado_por.apellidos or ''}".strip() or obj.aprobado_por.username
+        return None
+    
+    def create(self, validated_data):
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class TransferenciaPacienteSerializer(serializers.ModelSerializer):
+    """Serializer para transferencias de pacientes a otras materias"""
+    paciente_nombre = serializers.SerializerMethodField()
+    estudiante_origen_nombre = serializers.SerializerMethodField()
+    estudiante_destino_nombre = serializers.SerializerMethodField()
+    docente_aprobador_nombre = serializers.SerializerMethodField()
+    materia_origen_nombre = serializers.CharField(source='get_materia_origen_display', read_only=True)
+    materia_destino_nombre = serializers.CharField(source='get_materia_destino_display', read_only=True)
+    motivo_display = serializers.CharField(source='get_motivo_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    class Meta:
+        model = TransferenciaPaciente
+        fields = '__all__'
+        read_only_fields = ['fecha_solicitud', 'fecha_aprobacion', 'fecha_asignacion', 'nueva_asignacion', 'docente_aprobador']
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_estudiante_origen_nombre(self, obj):
+        if obj.estudiante_origen:
+            return f"{obj.estudiante_origen.nombres or ''} {obj.estudiante_origen.apellidos or ''}".strip() or obj.estudiante_origen.username
+        return None
+    
+    def get_estudiante_destino_nombre(self, obj):
+        if obj.estudiante_destino:
+            return f"{obj.estudiante_destino.nombres or ''} {obj.estudiante_destino.apellidos or ''}".strip() or obj.estudiante_destino.username
+        return "Pendiente de Asignación"
+    
+    def get_docente_aprobador_nombre(self, obj):
+        if obj.docente_aprobador:
+            return f"{obj.docente_aprobador.nombres or ''} {obj.docente_aprobador.apellidos or ''}".strip() or obj.docente_aprobador.username
+        return None
+    
+    def create(self, validated_data):
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
+            validated_data['id'] = str(uuid.uuid4())
+        return super().create(validated_data)
+
+
+class RemisionInterCatedraSerializer(serializers.ModelSerializer):
+    """Serializer para remisiones inter-cátedra"""
+    paciente_nombre = serializers.SerializerMethodField()
+    estudiante_remite_nombre = serializers.SerializerMethodField()
+    estudiante_recibe_nombre = serializers.SerializerMethodField()
+    docente_nombre = serializers.SerializerMethodField()
+    materia_origen_display = serializers.CharField(source='get_materia_origen_display', read_only=True)
+    materia_destino_display = serializers.CharField(source='get_materia_destino_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    class Meta:
+        model = RemisionInterCatedra
+        fields = '__all__'
+        read_only_fields = ['fecha_remision', 'actualizado_en', 'fecha_atencion']
+    
+    def get_paciente_nombre(self, obj):
+        if obj.paciente:
+            return f"{obj.paciente.nombres} {obj.paciente.apellidos}"
+        return None
+    
+    def get_estudiante_remite_nombre(self, obj):
+        if obj.estudiante_remite:
+            return f"{obj.estudiante_remite.nombres or ''} {obj.estudiante_remite.apellidos or ''}".strip() or obj.estudiante_remite.username
+        return None
+    
+    def get_estudiante_recibe_nombre(self, obj):
+        if obj.estudiante_recibe:
+            return f"{obj.estudiante_recibe.nombres or ''} {obj.estudiante_recibe.apellidos or ''}".strip() or obj.estudiante_recibe.username
+        return None
+    
+    def get_docente_nombre(self, obj):
+        if obj.docente_autoriza:
+            return f"{obj.docente_autoriza.nombres or ''} {obj.docente_autoriza.apellidos or ''}".strip() or obj.docente_autoriza.username
+        return None
+    
+    def create(self, validated_data):
+        import uuid
+        if 'id' not in validated_data or not validated_data.get('id'):
             validated_data['id'] = str(uuid.uuid4())
         return super().create(validated_data)

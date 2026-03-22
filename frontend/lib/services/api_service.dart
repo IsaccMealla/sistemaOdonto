@@ -3,11 +3,207 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
+  /// Obtener registros de periodontograma por paciente
+  Future<List<dynamic>> fetchRegistrosPeriodontogramaPorPaciente(
+      String pacienteId) async {
+    // Utiliza el método general de historia clínica, filtrando por materia y tipo_registro
+    return await fetchRegistrosHistoriaClinica(
+      pacienteId: pacienteId,
+      materia: 'periodoncia',
+      tipoRegistro: 'periodontograma',
+    );
+  }
+
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
   final String baseUrl = 'http://127.0.0.1:8000';
+
+  // ==================== CITAS MÉDICAS ====================
+
+  Future<List<dynamic>> fetchCitas(
+      {String? estudianteId, String? docenteId, String? pacienteId}) async {
+    await loadToken();
+    var url = '$baseUrl/api/citas/';
+    final params = <String, String>{};
+    if (estudianteId != null) params['estudiante_id'] = estudianteId;
+    if (docenteId != null) params['docente_id'] = docenteId;
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch citas: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createCita(Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/citas/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create cita: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateCita(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/citas/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update cita: ${res.body}');
+  }
+
+  Future<void> deleteCita(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/citas/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete cita: ${res.body}');
+  }
+
+  // ==================== TRATAMIENTOS DE MATERIAS ====================
+
+  Future<List<dynamic>> fetchTratamientos({
+    String? estudianteId,
+    String? pacienteId,
+    String? materia,
+    String? estado,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/tratamientos/';
+    final params = <String, String>{};
+    if (estudianteId != null) params['estudiante_id'] = estudianteId;
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+    if (materia != null) params['materia'] = materia;
+    if (estado != null) params['estado'] = estado;
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch tratamientos: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getTratamiento(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/tratamientos/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createTratamiento(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/tratamientos/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateTratamiento(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/tratamientos/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update tratamiento: ${res.body}');
+  }
+
+  Future<void> deleteTratamiento(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/tratamientos/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> solicitarAprobacionTratamiento(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/tratamientos/$id/solicitar_aprobacion/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to solicitar aprobación: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> aprobarTratamiento(String id,
+      {String? observaciones}) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/tratamientos/$id/aprobar/'),
+      headers: _headers(),
+      body: jsonEncode({'observaciones': observaciones ?? ''}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to aprobar tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> rechazarTratamiento(
+      String id, String observaciones) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/tratamientos/$id/rechazar/'),
+      headers: _headers(),
+      body: jsonEncode({'observaciones': observaciones}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to rechazar tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getEstadisticasTratamientos() async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/tratamientos/estadisticas/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get estadísticas: ${res.body}');
+  }
+
   String? _token;
 
   Future<void> setToken(String token) async {
@@ -35,6 +231,26 @@ class ApiService {
         headers: _headers());
     if (res.statusCode == 200) return jsonDecode(res.body) as List<dynamic>;
     throw Exception('Failed to load pacientes');
+  }
+
+  Future<Map<String, dynamic>> getPaciente(String id) async {
+    await loadToken();
+    final res = await http.get(Uri.parse('$baseUrl/api/pacientes/$id/'),
+        headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get paciente: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getUsuario(String id) async {
+    await loadToken();
+    final res = await http.get(Uri.parse('$baseUrl/api/usuarios/$id/'),
+        headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get usuario: ${res.body}');
   }
 
   Future<Map<String, dynamic>> createPaciente(Map<String, dynamic> data) async {
@@ -119,6 +335,19 @@ class ApiService {
   }
 
   // ===== USUARIOS =====
+
+  /// Obtener información del usuario autenticado actual
+  Future<Map<String, dynamic>> getCurrentUser() async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/usuarios/me/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get current user: ${res.body}');
+  }
 
   /// Obtener lista de usuarios activos
   Future<List<dynamic>> fetchUsuarios() async {
@@ -432,6 +661,16 @@ class ApiService {
         headers: _headers());
     if (res.statusCode == 204) return;
     throw Exception('Failed to delete antecedente familiar');
+  }
+
+  // Eliminar antecedente padre (eliminacion fisica)
+  Future<void> deleteAntecedente(String id) async {
+    await loadToken();
+    final res = await http.delete(
+        Uri.parse('$baseUrl/api/antecedentes/$id/hard_delete/'),
+        headers: _headers());
+    if (res.statusCode == 200) return;
+    throw Exception('Failed to delete antecedente');
   }
 
   // Antecedentes Ginecologicos
@@ -850,6 +1089,30 @@ class ApiService {
     throw Exception('Failed to load asignaciones');
   }
 
+  /// Obtener pacientes asignados a un estudiante con información de asignación
+  Future<List<dynamic>> fetchMisPacientesAsignados(String estudianteId) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse(
+          '$baseUrl/api/asignaciones/mis_pacientes/?estudiante_id=$estudianteId'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body) as List<dynamic>;
+    throw Exception('Failed to load assigned pacientes: ${res.body}');
+  }
+
+  /// Obtener estudiantes y sus asignaciones para un docente
+  Future<List<dynamic>> fetchAsignacionesDocente(String docenteId) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse(
+          '$baseUrl/api/asignaciones/asignaciones_docente/?docente_id=$docenteId'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body) as List<dynamic>;
+    throw Exception('Failed to load docente asignaciones: ${res.body}');
+  }
+
   Future<List<dynamic>> fetchAsignacionesEliminadas() async {
     await loadToken();
     final res = await http.get(Uri.parse('$baseUrl/api/asignaciones/deleted/'),
@@ -942,6 +1205,17 @@ class ApiService {
       final token = data['token'] as String?;
       if (token == null) throw Exception('Token not returned');
       await setToken(token);
+
+      // Obtener y guardar información del usuario
+      try {
+        final usuario = await getCurrentUser();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('usuario', jsonEncode(usuario));
+        print('Usuario guardado en SharedPreferences: ${usuario['username']}');
+      } catch (e) {
+        print('Error al guardar usuario: $e');
+      }
+
       return;
     }
     throw Exception('Login failed');
@@ -1250,5 +1524,804 @@ class ApiService {
     );
     if (res.statusCode == 200) return;
     throw Exception('Failed to hard delete registro: ${res.body}');
+  }
+
+  // ==================== SEGUIMIENTO CLÍNICO ====================
+
+  /// Obtener seguimientos con filtros opcionales
+  Future<List<dynamic>> fetchSeguimientos({
+    String? estudianteId,
+    String? pacienteId,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/seguimientos/';
+    final params = <String, String>{};
+
+    if (estudianteId != null) params['estudiante_id'] = estudianteId;
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch seguimientos: ${res.body}');
+  }
+
+  /// Crear un nuevo seguimiento
+  Future<Map<String, dynamic>> createSeguimiento(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/seguimientos/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create seguimiento: ${res.body}');
+  }
+
+  /// Obtener un seguimiento por ID
+  Future<Map<String, dynamic>> fetchSeguimiento(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/seguimientos/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to fetch seguimiento: ${res.body}');
+  }
+
+  /// Eliminar un seguimiento (soft delete)
+  Future<void> deleteSeguimiento(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/seguimientos/$id/soft_delete/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) return;
+    throw Exception('Failed to delete seguimiento: ${res.body}');
+  }
+
+  // ==================== ENTRADAS DE SEGUIMIENTO ====================
+
+  /// Obtener entradas de seguimiento con filtros
+  Future<List<dynamic>> fetchEntradasSeguimiento({
+    String? seguimientoId,
+    bool? firmado,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/entradas-seguimiento/';
+    final params = <String, String>{};
+
+    if (seguimientoId != null) params['seguimiento_id'] = seguimientoId;
+    if (firmado != null) params['firmado'] = firmado.toString();
+
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch entradas: ${res.body}');
+  }
+
+  /// Crear una nueva entrada de seguimiento
+  Future<Map<String, dynamic>> createEntradaSeguimiento(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/entradas-seguimiento/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create entrada: ${res.body}');
+  }
+
+  /// Actualizar una entrada de seguimiento
+  Future<Map<String, dynamic>> updateEntradaSeguimiento(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/entradas-seguimiento/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update entrada: ${res.body}');
+  }
+
+  /// Firmar una entrada de seguimiento (acción de docente)
+  Future<Map<String, dynamic>> firmarEntradaSeguimiento(
+      String id, String docenteId,
+      {String? observaciones}) async {
+    await loadToken();
+    final data = {
+      'docente_id': docenteId,
+      if (observaciones != null) 'observaciones': observaciones,
+    };
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/entradas-seguimiento/$id/firmar/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to firmar entrada: ${res.body}');
+  }
+
+  /// Eliminar una entrada de seguimiento (soft delete)
+  Future<void> deleteEntradaSeguimiento(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/entradas-seguimiento/$id/soft_delete/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) return;
+    throw Exception('Failed to delete entrada: ${res.body}');
+  }
+
+  // ============ MÉTODOS GENÉRICOS PARA PERMISOS ============
+
+  /// GET genérico
+  Future<dynamic> get(String endpoint,
+      {Map<String, dynamic>? queryParameters}) async {
+    await loadToken();
+
+    var uri = Uri.parse('$baseUrl$endpoint');
+    if (queryParameters != null && queryParameters.isNotEmpty) {
+      uri = uri.replace(
+          queryParameters: queryParameters
+              .map((key, value) => MapEntry(key, value.toString())));
+    }
+
+    final res = await http.get(uri, headers: _headers());
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception('GET failed: ${res.statusCode} - ${res.body}');
+  }
+
+  /// POST genérico
+  Future<dynamic> post(String endpoint, {Map<String, dynamic>? data}) async {
+    await loadToken();
+
+    final res = await http.post(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: _headers(),
+      body: data != null ? jsonEncode(data) : null,
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body);
+    }
+    throw Exception('POST failed: ${res.statusCode} - ${res.body}');
+  }
+
+  /// DELETE genérico
+  Future<void> delete(String endpoint) async {
+    await loadToken();
+
+    final res = await http.delete(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: _headers(),
+    );
+
+    if (res.statusCode == 204 || res.statusCode == 200) {
+      return;
+    }
+    throw Exception('DELETE failed: ${res.statusCode} - ${res.body}');
+  }
+
+  /// PUT genérico
+  Future<dynamic> put(String endpoint, {Map<String, dynamic>? data}) async {
+    await loadToken();
+
+    final res = await http.put(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: _headers(),
+      body: data != null ? jsonEncode(data) : null,
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception('PUT failed: ${res.statusCode} - ${res.body}');
+  }
+
+  // ==================== PLANES DE TRATAMIENTO ====================
+
+  Future<List<dynamic>> fetchPlanesTratamiento({
+    String? pacienteId,
+    String? estudianteId,
+    String? materia,
+    String? estado,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/planes-tratamiento/';
+    final params = <String, String>{};
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+    if (estudianteId != null) params['estudiante_id'] = estudianteId;
+    if (materia != null) params['materia'] = materia;
+    if (estado != null) params['estado'] = estado;
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch planes tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getPlanTratamiento(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/planes-tratamiento/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get plan tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createPlanTratamiento(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/planes-tratamiento/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create plan tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updatePlanTratamiento(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/planes-tratamiento/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update plan tratamiento: ${res.body}');
+  }
+
+  Future<void> deletePlanTratamiento(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/planes-tratamiento/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete plan tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> aprobarPlanTratamiento(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/planes-tratamiento/$id/aprobar/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to aprobar plan tratamiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> actualizarEstadisticasPlan(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/planes-tratamiento/$id/actualizar_estadisticas/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to actualizar estadísticas: ${res.body}');
+  }
+
+  // ==================== PROCEDIMIENTOS DEL PLAN ====================
+
+  Future<List<dynamic>> fetchProcedimientosPlan({String? planId}) async {
+    await loadToken();
+    var url = '$baseUrl/api/procedimientos-plan/';
+    if (planId != null) {
+      url += '?plan_id=$planId';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch procedimientos plan: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getProcedimientoPlan(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/procedimientos-plan/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get procedimiento plan: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createProcedimientoPlan(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/procedimientos-plan/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create procedimiento plan: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateProcedimientoPlan(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/procedimientos-plan/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update procedimiento plan: ${res.body}');
+  }
+
+  Future<void> deleteProcedimientoPlan(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/procedimientos-plan/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete procedimiento plan: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> completarProcedimiento(
+      String id, double costoReal) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/procedimientos-plan/$id/completar/'),
+      headers: _headers(),
+      body: jsonEncode({'costo_real': costoReal}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to completar procedimiento: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> iniciarProcedimiento(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/procedimientos-plan/$id/iniciar/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to iniciar procedimiento: ${res.body}');
+  }
+
+  // ==================== EVOLUCIONES CLÍNICAS ====================
+
+  Future<List<dynamic>> fetchEvolucionesClinicas({String? planId}) async {
+    await loadToken();
+    var url = '$baseUrl/api/evoluciones-clinicas/';
+    if (planId != null) {
+      url += '?plan_id=$planId';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch evoluciones clínicas: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getEvolucionClinica(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get evolución clínica: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createEvolucionClinica(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create evolución clínica: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateEvolucionClinica(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update evolución clínica: ${res.body}');
+  }
+
+  Future<void> deleteEvolucionClinica(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete evolución clínica: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> firmarEvolucionEstudiante(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/$id/firmar_estudiante/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to firmar evolución (estudiante): ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> firmarEvolucionDocente(String id) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/$id/firmar_docente/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to firmar evolución (docente): ${res.body}');
+  }
+
+  Future<List<dynamic>> fetchEvolucionesSinFirmaDocente() async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/evoluciones-clinicas/?sin_firma_docente=true'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch evoluciones sin firma: ${res.body}');
+  }
+
+  // ==================== CUPOS DE ESTUDIANTE ====================
+
+  Future<List<dynamic>> fetchCuposEstudiante(String estudianteId) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse(
+          '$baseUrl/api/cupos-estudiante/mis_cupos/?estudiante_id=$estudianteId'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch cupos: ${res.body}');
+  }
+
+  // ==================== TRANSFERENCIAS DE PACIENTES ====================
+
+  Future<List<dynamic>> fetchTransferenciasPacientes({
+    String? pacienteId,
+    String? estudianteOrigenId,
+    String? estudianteDestinoId,
+    String? estado,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/transferencias-pacientes/';
+    final params = <String, String>{};
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+    if (estudianteOrigenId != null) {
+      params['estudiante_origen_id'] = estudianteOrigenId;
+    }
+    if (estudianteDestinoId != null) {
+      params['estudiante_destino_id'] = estudianteDestinoId;
+    }
+    if (estado != null) params['estado'] = estado;
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch transferencias: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getTransferenciaPaciente(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get transferencia: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createTransferenciaPaciente(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create transferencia: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateTransferenciaPaciente(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update transferencia: ${res.body}');
+  }
+
+  Future<void> deleteTransferenciaPaciente(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete transferencia: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> aprobarTransferenciaPaciente(String id,
+      {String? observaciones}) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/$id/aprobar/'),
+      headers: _headers(),
+      body: jsonEncode({'observaciones': observaciones ?? ''}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to aprobar transferencia: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> asignarEstudianteTransferencia(
+      String id, String estudianteId) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse(
+          '$baseUrl/api/transferencias-pacientes/$id/asignar_estudiante/'),
+      headers: _headers(),
+      body: jsonEncode({'estudiante_id': estudianteId}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to asignar estudiante: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> rechazarTransferenciaPaciente(
+      String id, String observaciones) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/transferencias-pacientes/$id/rechazar/'),
+      headers: _headers(),
+      body: jsonEncode({'observaciones': observaciones}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to rechazar transferencia: ${res.body}');
+  }
+
+  // ==================== REMISIONES INTER-CÁTEDRA ====================
+
+  Future<List<dynamic>> fetchRemisionesInterCatedra({
+    String? pacienteId,
+    String? materiaOrigen,
+    String? materiaDestino,
+    String? estado,
+  }) async {
+    await loadToken();
+    var url = '$baseUrl/api/remisiones-intercatedra/';
+    final params = <String, String>{};
+    if (pacienteId != null) params['paciente_id'] = pacienteId;
+    if (materiaOrigen != null) params['materia_origen'] = materiaOrigen;
+    if (materiaDestino != null) params['materia_destino'] = materiaDestino;
+    if (estado != null) params['estado'] = estado;
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    }
+    final res = await http.get(Uri.parse(url), headers: _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch remisiones: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getRemisionInterCatedra(String id) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/remisiones-intercatedra/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get remisión: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createRemisionInterCatedra(
+      Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/remisiones-intercatedra/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create remisión: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> updateRemisionInterCatedra(
+      String id, Map<String, dynamic> data) async {
+    await loadToken();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/remisiones-intercatedra/$id/'),
+      headers: _headers(),
+      body: jsonEncode(data),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to update remisión: ${res.body}');
+  }
+
+  Future<void> deleteRemisionInterCatedra(String id) async {
+    await loadToken();
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/remisiones-intercatedra/$id/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 204) return;
+    throw Exception('Failed to delete remisión: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> completarAtencionRemision(
+    String id, {
+    required String tratamientoRealizado,
+    required String hallazgos,
+    String? recomendaciones,
+  }) async {
+    await loadToken();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/remisiones-intercatedra/$id/completar_atencion/'),
+      headers: _headers(),
+      body: jsonEncode({
+        'tratamiento_realizado': tratamientoRealizado,
+        'hallazgos': hallazgos,
+        'recomendaciones': recomendaciones ?? '',
+      }),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to completar atención remisión: ${res.body}');
+  }
+
+  // ==================== REGISTROS CLÍNICOS REFERENCIADOS ====================
+
+  Future<Map<String, dynamic>> obtenerRegistroClinico(
+      String tipoRegistro, String registroId) async {
+    await loadToken();
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/registro-clinico/$tipoRegistro/$registroId/'),
+      headers: _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to obtener registro clínico: ${res.body}');
+  }
+
+  Future<List<dynamic>> obtenerRegistrosDisponiblesParaReferencia(
+      String pacienteId) async {
+    await loadToken();
+    // Obtener todos los registros del paciente para poder referenciarlos
+    final registros = <Map<String, dynamic>>[];
+
+    try {
+      // Obtener historia clínica general
+      final historiaClinica = await fetchRegistrosHistoriaClinica(
+        pacienteId: pacienteId,
+      );
+      for (var registro in historiaClinica) {
+        registros.add({
+          'tipo': registro['tipo_registro'] ?? 'historia_clinica',
+          'registro_id': registro['id'],
+          'descripcion': registro['materia'] ?? 'Registro clínico',
+          'fecha': registro['fecha_registro'] ?? registro['fecha'],
+        });
+      }
+
+      // Obtener protocolos quirúrgicos
+      final protocolos = await get('/api/protocolos-quirurgicos/',
+          queryParameters: {'paciente_id': pacienteId});
+      if (protocolos is List) {
+        for (var proto in protocolos) {
+          registros.add({
+            'tipo': 'protocolo_quirurgico',
+            'registro_id': proto['id'],
+            'descripcion': 'Protocolo Quirúrgico',
+            'fecha': proto['fecha_cirugia'] ?? proto['creado_en'],
+          });
+        }
+      }
+    } catch (e) {
+      print('Error obteniendo registros para referencia: $e');
+    }
+
+    return registros;
   }
 }

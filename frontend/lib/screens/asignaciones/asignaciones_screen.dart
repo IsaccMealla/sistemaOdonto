@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../controllers/menu_app_controller.dart';
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:universal_html/html.dart' as html;
+import 'package:intl/intl.dart';
 
 class AsignacionesScreen extends StatefulWidget {
   @override
@@ -14,6 +20,12 @@ class _AsignacionesScreenState extends State<AsignacionesScreen> {
   bool _vistaEstudiante = true; // true = por estudiante, false = por paciente
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  // Filtros avanzados
+  String? _estadoSeleccionado;
+  String? _materiaSeleccionada;
+  DateTime? _fechaDesde;
+  DateTime? _fechaHasta;
 
   @override
   void initState() {
@@ -39,25 +51,280 @@ class _AsignacionesScreenState extends State<AsignacionesScreen> {
   }
 
   List<dynamic> _filterList(List<dynamic> list) {
-    if (_searchQuery.isEmpty) return list;
-    
-    return list.where((item) {
-      final estudianteNombre = (item['estudiante_nombre'] ?? '').toString().toLowerCase();
-      final estudianteCodigo = (item['estudiante_codigo'] ?? '').toString().toLowerCase();
-      final pacienteNombre = (item['paciente_nombre'] ?? '').toString().toLowerCase();
-      final pacienteCelular = (item['paciente_celular'] ?? '').toString().toLowerCase();
-      final docenteNombre = (item['docente_nombre'] ?? '').toString().toLowerCase();
-      final materia = (item['materia'] ?? '').toString().toLowerCase();
-      final estado = (item['estado'] ?? '').toString().toLowerCase();
-      
-      return estudianteNombre.contains(_searchQuery) ||
-             estudianteCodigo.contains(_searchQuery) ||
-             pacienteNombre.contains(_searchQuery) ||
-             pacienteCelular.contains(_searchQuery) ||
-             docenteNombre.contains(_searchQuery) ||
-             materia.contains(_searchQuery) ||
-             estado.contains(_searchQuery);
-    }).toList();
+    var filtered = list;
+
+    // Filtro de búsqueda
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((item) {
+        final estudianteNombre =
+            (item['estudiante_nombre'] ?? '').toString().toLowerCase();
+        final estudianteCodigo =
+            (item['estudiante_codigo'] ?? '').toString().toLowerCase();
+        final pacienteNombre =
+            (item['paciente_nombre'] ?? '').toString().toLowerCase();
+        final pacienteCelular =
+            (item['paciente_celular'] ?? '').toString().toLowerCase();
+        final docenteNombre =
+            (item['docente_nombre'] ?? '').toString().toLowerCase();
+        final materia = (item['materia'] ?? '').toString().toLowerCase();
+        final estado = (item['estado'] ?? '').toString().toLowerCase();
+
+        return estudianteNombre.contains(_searchQuery) ||
+            estudianteCodigo.contains(_searchQuery) ||
+            pacienteNombre.contains(_searchQuery) ||
+            pacienteCelular.contains(_searchQuery) ||
+            docenteNombre.contains(_searchQuery) ||
+            materia.contains(_searchQuery) ||
+            estado.contains(_searchQuery);
+      }).toList();
+    }
+
+    // Filtro por estado
+    if (_estadoSeleccionado != null && _estadoSeleccionado!.isNotEmpty) {
+      filtered = filtered
+          .where((item) => item['estado'] == _estadoSeleccionado)
+          .toList();
+    }
+
+    // Filtro por materia
+    if (_materiaSeleccionada != null && _materiaSeleccionada!.isNotEmpty) {
+      filtered = filtered
+          .where((item) => item['materia'] == _materiaSeleccionada)
+          .toList();
+    }
+
+    // Filtro por rango de fechas
+    if (_fechaDesde != null || _fechaHasta != null) {
+      filtered = filtered.where((item) {
+        final fechaAsignacion = item['fecha_asignacion'];
+        if (fechaAsignacion == null) return false;
+        try {
+          final fecha = DateTime.parse(fechaAsignacion);
+          if (_fechaDesde != null && fecha.isBefore(_fechaDesde!)) return false;
+          if (_fechaHasta != null &&
+              fecha.isAfter(_fechaHasta!.add(Duration(days: 1)))) return false;
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+
+    return filtered;
+  }
+
+  /// Limpiar todos los filtros
+  void _limpiarFiltros() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _estadoSeleccionado = null;
+      _materiaSeleccionada = null;
+      _fechaDesde = null;
+      _fechaHasta = null;
+    });
+  }
+
+  /// Contar filtros activos
+  int _contarFiltrosActivos() {
+    int count = 0;
+    if (_searchQuery.isNotEmpty) count++;
+    if (_estadoSeleccionado != null && _estadoSeleccionado!.isNotEmpty) count++;
+    if (_materiaSeleccionada != null && _materiaSeleccionada!.isNotEmpty)
+      count++;
+    if (_fechaDesde != null || _fechaHasta != null) count++;
+    return count;
+  }
+
+  /// Exportar a Excel
+  Future<void> _exportarExcel(List<dynamic> asignaciones) async {
+    try {
+      var excel = excel_lib.Excel.createExcel();
+      excel_lib.Sheet sheet = excel['Asignaciones'];
+
+      // Estilos
+      final headerStyle = excel_lib.CellStyle(
+        bold: true,
+        backgroundColorHex: excel_lib.ExcelColor.blue,
+        fontColorHex: excel_lib.ExcelColor.white,
+      );
+
+      // Encabezados
+      final headers = [
+        'Estudiante',
+        'Código Estudiante',
+        'Paciente',
+        'Celular Paciente',
+        'Docente',
+        'Materia',
+        'Estado',
+        'Fecha Asignación',
+        'Fecha Inicio',
+        'Fecha Fin',
+      ];
+
+      for (int i = 0; i < headers.length; i++) {
+        var cell = sheet.cell(
+          excel_lib.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0),
+        );
+        cell.value = excel_lib.TextCellValue(headers[i]);
+        cell.cellStyle = headerStyle;
+      }
+
+      // Datos
+      for (int i = 0; i < asignaciones.length; i++) {
+        final a = asignaciones[i];
+        final rowIndex = i + 1;
+
+        final valores = [
+          a['estudiante_nombre'] ?? '',
+          a['estudiante_codigo'] ?? '',
+          a['paciente_nombre'] ?? '',
+          a['paciente_celular'] ?? '',
+          a['docente_nombre'] ?? '',
+          a['materia'] ?? '',
+          _getEstadoLabel(a['estado'] ?? ''),
+          a['fecha_asignacion'] != null
+              ? DateFormat('dd/MM/yyyy')
+                  .format(DateTime.parse(a['fecha_asignacion']))
+              : '',
+          a['fecha_inicio'] != null
+              ? DateFormat('dd/MM/yyyy')
+                  .format(DateTime.parse(a['fecha_inicio']))
+              : '',
+          a['fecha_fin'] != null
+              ? DateFormat('dd/MM/yyyy').format(DateTime.parse(a['fecha_fin']))
+              : '',
+        ];
+
+        for (int j = 0; j < valores.length; j++) {
+          var cell = sheet.cell(
+            excel_lib.CellIndex.indexByColumnRow(
+                columnIndex: j, rowIndex: rowIndex),
+          );
+          cell.value = excel_lib.TextCellValue(valores[j].toString());
+        }
+      }
+
+      // Ajustar ancho de columnas
+      for (int i = 0; i < headers.length; i++) {
+        sheet.setColumnWidth(i, 20);
+      }
+
+      // Guardar y descargar
+      var fileBytes = excel.save();
+      if (fileBytes != null) {
+        final blob = html.Blob([
+          fileBytes
+        ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute('download',
+              'asignaciones_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx')
+          ..click();
+        html.Url.revokeObjectUrl(url);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Excel exportado exitosamente')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error al exportar Excel: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Exportar a PDF
+  Future<void> _exportarPDF(List<dynamic> asignaciones) async {
+    try {
+      final pdf = pw.Document();
+
+      // Dividir en páginas si hay muchos registros
+      final itemsPerPage = 18;
+      final totalPages = (asignaciones.length / itemsPerPage).ceil();
+
+      for (int page = 0; page < totalPages; page++) {
+        final startIndex = page * itemsPerPage;
+        final endIndex = (startIndex + itemsPerPage < asignaciones.length)
+            ? startIndex + itemsPerPage
+            : asignaciones.length;
+        final pageData = asignaciones.sublist(startIndex, endIndex);
+
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.a4.landscape,
+            build: (pw.Context context) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Listado de Asignaciones',
+                    style: pw.TextStyle(
+                        fontSize: 24, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    'Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+                    style: pw.TextStyle(fontSize: 10),
+                  ),
+                  pw.Text(
+                    'Total de registros: ${asignaciones.length} | Página ${page + 1} de $totalPages',
+                    style: pw.TextStyle(fontSize: 10),
+                  ),
+                  pw.SizedBox(height: 16),
+                  pw.Table.fromTextArray(
+                    border: pw.TableBorder.all(),
+                    headerStyle: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 7),
+                    cellStyle: pw.TextStyle(fontSize: 6),
+                    cellHeight: 18,
+                    headerDecoration:
+                        pw.BoxDecoration(color: PdfColors.grey300),
+                    headers: [
+                      'Estudiante',
+                      'Paciente',
+                      'Docente',
+                      'Materia',
+                      'Estado',
+                      'Fecha Asig.'
+                    ],
+                    data: pageData.map((a) {
+                      return [
+                        a['estudiante_nombre'] ?? '',
+                        a['paciente_nombre'] ?? '',
+                        a['docente_nombre'] ?? '',
+                        a['materia'] ?? '',
+                        _getEstadoLabel(a['estado'] ?? ''),
+                        a['fecha_asignacion'] != null
+                            ? DateFormat('dd/MM/yy')
+                                .format(DateTime.parse(a['fecha_asignacion']))
+                            : '',
+                      ];
+                    }).toList(),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
+      // Mostrar diálogo de impresión/guardado
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name:
+            'asignaciones_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error al exportar PDF: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
   }
 
   void _toggleVista() {
@@ -137,74 +404,340 @@ class _AsignacionesScreenState extends State<AsignacionesScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar por estudiante, paciente, docente, materia o estado...',
-                prefixIcon: Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    // Barra de búsqueda y exportación
+                    Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Buscar por estudiante, paciente, docente, materia o estado...',
+                                prefixIcon: Icon(Icons.search),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear),
+                                        onPressed: () =>
+                                            _searchController.clear(),
+                                      )
+                                    : null,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.surface,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _future.then((allList) {
+                                final list = _filterList(allList);
+                                _exportarExcel(list);
+                              });
+                            },
+                            icon: Icon(Icons.file_download),
+                            label: Text('Excel'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _future.then((allList) {
+                                final list = _filterList(allList);
+                                _exportarPDF(list);
+                              });
+                            },
+                            icon: Icon(Icons.picture_as_pdf),
+                            label: Text('PDF'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Filtros avanzados
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.filter_list, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Filtros',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16),
+                                  ),
+                                  Spacer(),
+                                  if (_contarFiltrosActivos() > 0)
+                                    Chip(
+                                      label: Text(
+                                          '${_contarFiltrosActivos()} activos'),
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
+                                    ),
+                                  SizedBox(width: 8),
+                                  TextButton.icon(
+                                    onPressed: _limpiarFiltros,
+                                    icon: Icon(Icons.clear_all, size: 18),
+                                    label: Text('Limpiar'),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      value: _estadoSeleccionado,
+                                      decoration: InputDecoration(
+                                        labelText: 'Estado',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                      ),
+                                      items: [
+                                        DropdownMenuItem(
+                                            value: null, child: Text('Todos')),
+                                        DropdownMenuItem(
+                                            value: 'activa',
+                                            child: Text('Activa')),
+                                        DropdownMenuItem(
+                                            value: 'en_progreso',
+                                            child: Text('En Progreso')),
+                                        DropdownMenuItem(
+                                            value: 'completada',
+                                            child: Text('Completada')),
+                                        DropdownMenuItem(
+                                            value: 'cancelada',
+                                            child: Text('Cancelada')),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _estadoSeleccionado = value;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      value: _materiaSeleccionada,
+                                      decoration: InputDecoration(
+                                        labelText: 'Materia',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                      ),
+                                      items: [
+                                        DropdownMenuItem(
+                                            value: null, child: Text('Todas')),
+                                        DropdownMenuItem(
+                                            value: 'Operatoria Dental',
+                                            child: Text('Operatoria Dental')),
+                                        DropdownMenuItem(
+                                            value: 'Cirugía Oral',
+                                            child: Text('Cirugía Oral')),
+                                        DropdownMenuItem(
+                                            value: 'Endodoncia',
+                                            child: Text('Endodoncia')),
+                                        DropdownMenuItem(
+                                            value: 'Periodoncia',
+                                            child: Text('Periodoncia')),
+                                        DropdownMenuItem(
+                                            value: 'Prótesis',
+                                            child: Text('Prótesis')),
+                                        DropdownMenuItem(
+                                            value: 'Ortodoncia',
+                                            child: Text('Ortodoncia')),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _materiaSeleccionada = value;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final fecha = await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              _fechaDesde ?? DateTime.now(),
+                                          firstDate: DateTime(2000),
+                                          lastDate: DateTime.now(),
+                                        );
+                                        if (fecha != null) {
+                                          setState(() {
+                                            _fechaDesde = fecha;
+                                          });
+                                        }
+                                      },
+                                      child: InputDecorator(
+                                        decoration: InputDecoration(
+                                          labelText: 'Fecha Desde',
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 8),
+                                          suffixIcon: _fechaDesde != null
+                                              ? IconButton(
+                                                  icon: Icon(Icons.clear,
+                                                      size: 18),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      _fechaDesde = null;
+                                                    });
+                                                  },
+                                                )
+                                              : Icon(Icons.calendar_today),
+                                        ),
+                                        child: Text(
+                                          _fechaDesde != null
+                                              ? DateFormat('dd/MM/yyyy')
+                                                  .format(_fechaDesde!)
+                                              : 'Seleccionar',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final fecha = await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              _fechaHasta ?? DateTime.now(),
+                                          firstDate: DateTime(2000),
+                                          lastDate: DateTime.now(),
+                                        );
+                                        if (fecha != null) {
+                                          setState(() {
+                                            _fechaHasta = fecha;
+                                          });
+                                        }
+                                      },
+                                      child: InputDecorator(
+                                        decoration: InputDecoration(
+                                          labelText: 'Fecha Hasta',
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 8),
+                                          suffixIcon: _fechaHasta != null
+                                              ? IconButton(
+                                                  icon: Icon(Icons.clear,
+                                                      size: 18),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      _fechaHasta = null;
+                                                    });
+                                                  },
+                                                )
+                                              : Icon(Icons.calendar_today),
+                                        ),
+                                        child: Text(
+                                          _fechaHasta != null
+                                              ? DateFormat('dd/MM/yyyy')
+                                                  .format(_fechaHasta!)
+                                              : 'Seleccionar',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Expanded(
+                      child: FutureBuilder<List<dynamic>>(
+                        future: _future,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting)
+                            return Center(child: CircularProgressIndicator());
+                          if (snapshot.hasError)
+                            return Center(
+                                child: Text('Error: ${snapshot.error}'));
+                          final allList = snapshot.data ?? [];
+                          final list = _filterList(allList);
+                          if (allList.isEmpty)
+                            return RefreshIndicator(
+                                onRefresh: _refresh,
+                                child: ListView(children: [
+                                  SizedBox(height: 40),
+                                  Center(child: Text('No hay asignaciones aún'))
+                                ]));
+
+                          if (list.isEmpty)
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.search_off,
+                                      size: 64, color: Colors.grey),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    'No se encontraron resultados',
+                                    style: TextStyle(
+                                        fontSize: 16, color: Colors.grey),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Intenta con otros términos de búsqueda',
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                          return _vistaEstudiante
+                              ? _buildVistaEstudiante(list)
+                              : _buildVistaPaciente(list);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
               ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<dynamic>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
-            return Center(child: CircularProgressIndicator());
-          if (snapshot.hasError)
-            return Center(child: Text('Error: ${snapshot.error}'));
-          final allList = snapshot.data ?? [];
-          final list = _filterList(allList);
-          if (allList.isEmpty)
-            return RefreshIndicator(
-                onRefresh: _refresh,
-                child: ListView(children: [
-                  SizedBox(height: 40),
-                  Center(child: Text('No hay asignaciones aún'))
-                ]));
-          
-          if (list.isEmpty)
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.search_off, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'No se encontraron resultados',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Intenta con otros términos de búsqueda',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-
-          return _vistaEstudiante
-              ? _buildVistaEstudiante(list)
-              : _buildVistaPaciente(list);
+          );
         },
-      ),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton(
         child: Icon(Icons.add),

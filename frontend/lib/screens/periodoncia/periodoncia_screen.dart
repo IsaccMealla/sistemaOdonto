@@ -24,6 +24,69 @@ class PeridonciaScreen extends StatefulWidget {
 }
 
 class _PeridonciaScreenState extends State<PeridonciaScreen> {
+  Widget _buildHistorialRegistros() {
+    if (_isLoadingHistorial) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_historialRegistros.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+            'No hay registros previos de periodontograma para este paciente.',
+            style: TextStyle(color: Colors.grey)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: 16),
+        Text(
+          'Historial de Periodontogramas',
+          style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.blue[900]),
+        ),
+        SizedBox(height: 8),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: _historialRegistros.length,
+          itemBuilder: (context, index) {
+            final registro = _historialRegistros[index];
+            final fecha = registro['fecha'] ?? registro['created_at'] ?? '';
+            return Card(
+              margin: EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                title: Text('Registro ${index + 1}'),
+                subtitle: Text('Fecha: $fecha'),
+                trailing: TextButton(
+                  child: Text('Cargar'),
+                  onPressed: () {
+                    setState(() {
+                      _periodontogramaData = Map<String, dynamic>.from(
+                          registro['datos']['periodontograma'] ?? {});
+                      _observacionesController.text =
+                          registro['observaciones_docente'] ?? '';
+                      _periodontogramaKey = UniqueKey().toString() +
+                          DateTime.now().millisecondsSinceEpoch.toString();
+                    });
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // Historial de registros de periodontograma
+  List<dynamic> _historialRegistros = [];
+  bool _isLoadingHistorial = false;
   final _formKey = GlobalKey<FormState>();
   final ApiService _apiService = ApiService();
 
@@ -44,6 +107,7 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
   Map<String, dynamic> _antecedentesData = {};
   Map<String, dynamic> _examenData = {};
   Map<String, dynamic> _periodontogramaData = {};
+  String _periodontogramaKey = UniqueKey().toString();
 
   // Observaciones
   final TextEditingController _observacionesController =
@@ -52,26 +116,28 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
   @override
   void initState() {
     super.initState();
-    _inicializar();
+    _inicializarOptimizado();
   }
 
-  Future<void> _inicializar() async {
-    // Si vienen datos pre-cargados (desde asignaciones), ocultar selector
-    if (widget.pacienteId != null && widget.historialId != null) {
-      setState(() {
+  Future<void> _inicializarOptimizado() async {
+    setState(() => _isLoading = true);
+    try {
+      if (widget.pacienteId != null && widget.historialId != null) {
         _selectedPacienteId = widget.pacienteId;
         _selectedHistorialId = widget.historialId;
         _showPacienteSelector = false;
-      });
-      await _cargarDatosPaciente(widget.pacienteId!);
-    } else {
-      // Mostrar selector de paciente
-      await _cargarPacientes();
-    }
-
-    // Si hay un registro existente, cargarlo
-    if (widget.registroId != null) {
-      await _cargarRegistro();
+        // Solo cargar datos del paciente si no están ya en memoria
+        await _cargarDatosPaciente(widget.pacienteId!);
+      } else {
+        await _cargarPacientes();
+      }
+      if (widget.registroId != null) {
+        await _cargarRegistro();
+      }
+    } catch (e) {
+      _showError('Error al inicializar: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -145,9 +211,29 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
 
     await _cargarHistorialPaciente(paciente['id']);
 
+    // Cargar historial de registros de periodontograma para el paciente
+    await _cargarHistorialRegistros();
+
     setState(() {
       _isLoading = false;
     });
+  }
+
+  Future<void> _cargarHistorialRegistros() async {
+    if (_selectedPacienteId == null) return;
+    setState(() => _isLoadingHistorial = true);
+    try {
+      // Suponiendo que existe un método en ApiService para obtener los registros de periodontograma por paciente
+      final registros = await _apiService
+          .fetchRegistrosPeriodontogramaPorPaciente(_selectedPacienteId!);
+      setState(() {
+        _historialRegistros = registros;
+      });
+    } catch (e) {
+      _showError('Error al cargar historial de periodontograma: $e');
+    } finally {
+      setState(() => _isLoadingHistorial = false);
+    }
   }
 
   Future<void> _cargarRegistro() async {
@@ -178,45 +264,77 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
   }
 
   Future<void> _guardarRegistro() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isSaving) return;
+    FocusScope.of(context).unfocus();
 
-    // Validar que se haya seleccionado un paciente
+    if (!_formKey.currentState!.validate()) {
+      _showError('Por favor, complete correctamente el formulario.');
+      return;
+    }
+
     if (_selectedPacienteId == null || _selectedHistorialId == null) {
-      _showError('Debe seleccionar un paciente antes de guardar');
+      _showError('Debe seleccionar un paciente antes de guardar.');
       return;
     }
 
     setState(() => _isSaving = true);
+    final data = {
+      'historial': int.tryParse(_selectedHistorialId ?? ''),
+      'estudiante': widget.estudianteId,
+      'paciente': _selectedPacienteId,
+      'materia': 'periodoncia',
+      'tipo_registro': 'periodontograma',
+      'datos': {
+        'periodontograma': _periodontogramaData,
+      },
+      'observaciones_docente': _observacionesController.text,
+      'estado': 'pendiente',
+    };
 
     try {
-      final data = {
-        'historial': _selectedHistorialId,
-        'estudiante': widget.estudianteId,
-        'paciente': _selectedPacienteId,
-        'materia': 'periodoncia',
-        'habitos_datos': _habitosData,
-        'antecedentes_datos': _antecedentesData,
-        'examen_datos': _examenData,
-        'periodontograma_datos': _periodontogramaData,
-        'observaciones_docente': _observacionesController.text,
-        'estado': 'pendiente',
-      };
-
+      Map<String, dynamic>? result;
       if (widget.registroId != null) {
-        // Actualizar registro existente
-        await _apiService.updatePeriodoncia(widget.registroId!, data);
+        // Si tienes endpoint de update, descomenta la siguiente línea:
+        // result = await _apiService.updateRegistroHistoriaClinica(widget.registroId!, data);
         _showSuccess('Registro actualizado exitosamente');
       } else {
-        // Crear nuevo registro
-        await _apiService.createPeriodoncia(data);
-        _showSuccess('Registro creado exitosamente');
+        result = await _apiService.createRegistroHistoriaClinica(data);
+        if (result != null && result['id'] != null) {
+          _showSuccess('Registro creado exitosamente');
+        } else {
+          _showError('No se pudo guardar el registro. Intente nuevamente.');
+          setState(() => _isSaving = false);
+          return;
+        }
       }
-
-      Navigator.pop(context, true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Registro guardado exitosamente'),
+              backgroundColor: Colors.green),
+        );
+        await Future.delayed(Duration(milliseconds: 600));
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+              builder: (context) => PeridonciaScreen(
+                    pacienteId: _selectedPacienteId,
+                    historialId: _selectedHistorialId,
+                    estudianteId: widget.estudianteId,
+                  )),
+        );
+      }
+    } on Exception catch (e) {
+      String msg = 'Error al guardar: ';
+      if (e.toString().contains('401')) {
+        msg += 'Sesión expirada. Inicie sesión nuevamente.';
+      } else {
+        msg += e.toString();
+      }
+      _showError(msg);
     } catch (e) {
-      _showError('Error al guardar: $e');
+      _showError('Error inesperado: $e');
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -307,49 +425,15 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
                     // INFORMACIÓN DEL PACIENTE (si ya está seleccionado)
                     if (_pacienteSeleccionado != null) _buildInfoPaciente(),
 
+                    // HISTORIAL DE REGISTROS DE PERIODONTOGRAMA
+                    if (_pacienteSeleccionado != null)
+                      _buildHistorialRegistros(),
+
                     SizedBox(height: 24),
-
-                    // HÁBITOS
-                    HabitosWidget(
-                      initialData: _habitosData,
-                      onDataChanged: (data) {
-                        setState(() {
-                          _habitosData = data;
-                        });
-                      },
-                      readOnly: false,
-                    ),
-
-                    SizedBox(height: 32),
-
-                    // ANTECEDENTES DE ENFERMEDAD PERIODONTAL
-                    AntecedentesPeriodontalWidget(
-                      initialData: _antecedentesData,
-                      onDataChanged: (data) {
-                        setState(() {
-                          _antecedentesData = data;
-                        });
-                      },
-                      readOnly: false,
-                    ),
-
-                    SizedBox(height: 32),
-
-                    // EXAMEN PERIODONTAL
-                    ExamenPeriodontalWidget(
-                      initialData: _examenData,
-                      onDataChanged: (data) {
-                        setState(() {
-                          _examenData = data;
-                        });
-                      },
-                      readOnly: false,
-                    ),
-
-                    SizedBox(height: 32),
 
                     // PERIODONTOGRAMA VESTIBULAR
                     PeriodontogramaWidget(
+                      key: ValueKey('vestibular_${_periodontogramaKey}'),
                       titulo: 'PERIODONTOGRAMA PERIODONCIA VESTIBULAR',
                       initialData: _periodontogramaData,
                       onDataChanged: (data) {
@@ -364,6 +448,7 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
 
                     // PERIODONTOGRAMA LINGUAL/PALATINO
                     PeriodontogramaWidget(
+                      key: ValueKey('lingual_${_periodontogramaKey}'),
                       titulo: 'PERIODONTOGRAMA PERIODONCIA LINGUAL/PALATINO',
                       initialData: _periodontogramaData,
                       onDataChanged: (data) {
@@ -645,48 +730,29 @@ class _PeridonciaScreenState extends State<PeridonciaScreen> {
   }
 
   Widget _buildSeccionObservaciones() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.note_alt, color: Colors.orange[700], size: 28),
-              SizedBox(width: 12),
-              Text(
-                'OBSERVACIONES Y NOTAS',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[900],
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'OBSERVACIONES DEL DOCENTE',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue[900],
           ),
-          SizedBox(height: 16),
-          TextFormField(
-            controller: _observacionesController,
-            decoration: InputDecoration(
-              labelText: 'Observaciones del docente',
-              hintText: 'Hallazgos clínicos, recomendaciones, pronóstico...',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 5,
+        ),
+        SizedBox(height: 12),
+        TextFormField(
+          controller: _observacionesController,
+          maxLines: 4,
+          decoration: InputDecoration(
+            labelText: 'Ingrese las observaciones aquí',
+            border: OutlineInputBorder(),
+            filled: true,
+            fillColor: Colors.grey[50],
           ),
-        ],
-      ),
+        ),
+      ],
     );
-  }
-
-  @override
-  void dispose() {
-    _observacionesController.dispose();
-    super.dispose();
   }
 }

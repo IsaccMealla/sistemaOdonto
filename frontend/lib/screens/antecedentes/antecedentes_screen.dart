@@ -211,17 +211,24 @@ class _AntecedentesScreenState extends State<AntecedentesScreen>
                         DataCell(Text('${antecedentes.length} antecedente(s)')),
                         DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                           IconButton(
-                              icon: Icon(Icons.visibility),
+                              icon: Icon(Icons.visibility,
+                                  color: Theme.of(context).colorScheme.primary),
                               onPressed: () {
                                 _showPacienteAntecedentes(
                                     pacienteNombre, antecedentes);
                               }),
                           IconButton(
-                              icon: Icon(Icons.edit),
+                              icon: Icon(Icons.edit,
+                                  color:
+                                      Theme.of(context).colorScheme.secondary),
                               onPressed: () {
                                 _editarAntecedentes(
                                     pacienteNombre, antecedentes);
                               }),
+                          IconButton(
+                              icon: Icon(Icons.delete, color: Colors.redAccent),
+                              onPressed: () =>
+                                  _eliminarAntecedentes(antecedentes)),
                         ])),
                       ]);
                     }).toList()),
@@ -400,6 +407,47 @@ class _AntecedentesScreenState extends State<AntecedentesScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _eliminarAntecedentes(List<dynamic> antecedentes) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Confirmar eliminacion'),
+        content: Text(
+            '¿Estas seguro de eliminar ${antecedentes.length} antecedente(s)? Esta accion no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      try {
+        for (var antecedente in antecedentes) {
+          await api.deleteAntecedente(antecedente['id'].toString());
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Antecedentes eliminados exitosamente')),
+        );
+        _refresh();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al eliminar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _editarAntecedentes(

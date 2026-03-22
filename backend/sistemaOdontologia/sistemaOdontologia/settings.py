@@ -89,6 +89,12 @@ DATABASES = {
 }
 
 
+# Authentication Backends
+AUTHENTICATION_BACKENDS = [
+    'coreapi.auth_backend.UsuariosAuthBackend',  # Backend personalizado para modelo Usuarios
+    'django.contrib.auth.backends.ModelBackend',  # Backend por defecto de Django
+]
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 

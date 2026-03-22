@@ -1,6 +1,6 @@
 import 'package:admin/controllers/menu_app_controller.dart';
 import 'package:admin/responsive.dart';
-import 'package:admin/screens/dashboard/dashboard_screen.dart';
+import 'package:admin/screens/dashboard/dashboard_builder.dart';
 import 'package:admin/screens/pacientes/pacientes_screen.dart';
 import 'package:admin/screens/historiales/historiales_screen.dart';
 import 'package:admin/screens/contactos/contactos_screen.dart';
@@ -8,6 +8,8 @@ import 'package:admin/screens/contactos/papelera_contactos_screen.dart';
 import 'package:admin/screens/usuarios/usuarios_screen.dart';
 import 'package:admin/screens/usuarios/papelera_usuarios_screen.dart';
 import 'package:admin/screens/roles/roles_screen.dart';
+import 'package:admin/screens/permisos/permisos_screen.dart';
+import 'package:admin/screens/reportes/reportes_screen.dart';
 import 'package:admin/screens/pacientes/paciente_form.dart';
 import 'package:admin/screens/historiales/historial_form.dart';
 import 'package:admin/screens/contactos/contacto_form.dart';
@@ -31,12 +33,46 @@ import 'package:admin/screens/historia_clinica/odontopediatria/odontopediatria_s
 import 'package:admin/screens/historia_clinica/oclusion/oclusion_screen.dart';
 import 'package:admin/screens/historia_clinica/prostodoncia_removible/prostodoncia_removible_screen.dart';
 import 'package:admin/screens/historia_clinica/prostodoncia_fija/prostodoncia_fija_screen.dart';
+import 'package:admin/screens/historia_clinica/seguimiento/seguimiento_screen.dart';
+import 'package:admin/screens/aprobaciones/aprobaciones_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../services/permission_service.dart';
+import '../../services/api_service.dart';
 
 import 'components/side_menu.dart';
+import 'package:admin/screens/periodoncia/periodoncia_materia_screen.dart';
+import 'package:admin/screens/operatoria_endodoncia/operatoria_endodoncia_materia_screen.dart';
+import 'package:admin/screens/prostodoncia_fija/prostodoncia_fija_materia_screen.dart';
+import 'package:admin/screens/prostodoncia_removible/prostodoncia_removible_materia_screen.dart';
+import 'package:admin/screens/odontopediatria/odontopediatria_materia_screen.dart';
 
-class MainScreen extends StatelessWidget {
+class MainScreen extends StatefulWidget {
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Escuchar cambios en permisos
+    PermissionService.permissionsChanged.addListener(_onPermissionsChanged);
+  }
+
+  @override
+  void dispose() {
+    PermissionService.permissionsChanged.removeListener(_onPermissionsChanged);
+    super.dispose();
+  }
+
+  void _onPermissionsChanged() {
+    // Reconstruir el widget cuando cambien los permisos
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,6 +109,12 @@ class MainScreen extends StatelessWidget {
                       return PapeleraUsuariosScreen();
                     case 'roles':
                       return RolesScreen();
+                    case 'permisos':
+                      return PermisosScreen();
+                    case 'reportes':
+                      return ReportesScreen();
+                    case 'aprobaciones':
+                      return AprobacionesScreen();
                     case 'asignaciones':
                       return AsignacionesScreen();
                     case 'papelera_asignaciones':
@@ -121,12 +163,24 @@ class MainScreen extends StatelessWidget {
                     case 'examen_periodontal':
                       return ExamenPeriodontalScreen();
                     case 'periodontograma':
-                      return PeridonciaScreen(
-                        pacienteId: controller.currentPageArgs?['pacienteId'],
-                        historialId: controller.currentPageArgs?['historialId'],
-                        estudianteId:
-                            controller.currentPageArgs?['estudianteId'],
-                        registroId: controller.currentPageArgs?['registroId'],
+                    case 'periodoncia':
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return PeridonciaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                            registroId:
+                                controller.currentPageArgs?['registroId'],
+                          );
+                        },
                       );
                     case 'diagnostico_radiografico':
                       return DiagnosticoRadiograficoScreen();
@@ -140,6 +194,8 @@ class MainScreen extends StatelessWidget {
                       return ProstodonciaRemovibleScreen();
                     case 'clinica_prostodoncia_fija':
                       return ProstodonciaFijaScreen();
+                    case 'seguimiento_clinico':
+                      return SeguimientoScreen();
 
                     case 'antecedentes':
                       return AntecedentesScreen();
@@ -178,52 +234,89 @@ class MainScreen extends StatelessWidget {
 
                     // Materias Clínicas
                     case 'periodoncia':
-                      return PeridonciaScreen(
-                        pacienteId: controller.currentPageArgs?['pacienteId'],
-                        historialId: controller.currentPageArgs?['historialId'],
-                        estudianteId:
-                            controller.currentPageArgs?['estudianteId'],
-                        registroId: controller.currentPageArgs?['registroId'],
-                      );
-                    case 'cirugia_bucal':
-                      return Center(
-                        child: Text(
-                          'Cirugía Bucal - Próximamente',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return PeriodonciaMateriaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                          );
+                        },
                       );
                     case 'operatoria_endodoncia':
-                      return Center(
-                        child: Text(
-                          'Operatoria y Endodoncia - Próximamente',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return OperatoriaEndodonciaMateriaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                          );
+                        },
                       );
                     case 'prostodoncia_fija':
-                      return Center(
-                        child: Text(
-                          'Prostodoncia Fija - Próximamente',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return ProstodonciaFijaMateriaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                          );
+                        },
                       );
                     case 'prostodoncia_removible':
-                      return Center(
-                        child: Text(
-                          'Prostodoncia Removible - Próximamente',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return ProstodonciaRemovibleMateriaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                          );
+                        },
                       );
                     case 'odontopediatria':
-                      return Center(
-                        child: Text(
-                          'Odontopediatría - Próximamente',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      return FutureBuilder<Map<String, dynamic>>(
+                        future: ApiService().getCurrentUser(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          final user = snapshot.data!;
+                          return OdontopediatriaMateriaScreen(
+                            pacienteId:
+                                controller.currentPageArgs?['pacienteId'],
+                            historialId:
+                                controller.currentPageArgs?['historialId'],
+                            estudianteId: user['id'],
+                          );
+                        },
                       );
                     case 'semiologia':
                       return Center(
@@ -236,7 +329,7 @@ class MainScreen extends StatelessWidget {
 
                     case 'dashboard':
                     default:
-                      return DashboardScreen();
+                      return DashboardBuilder();
                   }
                 },
               ),
